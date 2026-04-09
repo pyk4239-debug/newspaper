@@ -18,4 +18,3 @@ self.addEventListener("fetch", e => {
     fetch(e.request).catch(() => caches.match(e.request))
   );
 });
-Commit changes 하면 끝이에요!
