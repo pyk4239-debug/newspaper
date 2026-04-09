@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 
 const STORAGE_KEY = "newspaper_v3";
 const CATS_KEY = "newspaper_cats";
@@ -33,13 +33,13 @@ const fmtDate = (iso) => new Date(iso).toLocaleDateString("ko-KR", { month: "lon
 const todayStr = () => new Date().toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long" });
 
 const css = `
-  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
     --bg: #F8F8F8; --paper: #FFF; --ink: #1A1A1A;
     --mid: #444; --muted: #AAA; --rule: #E5E5E5; --blue: #0066CC;
+    --font: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
   }
-  body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: var(--ink); min-height: 100vh; }
+  body { font-family: var(--font); background: var(--bg); color: var(--ink); min-height: 100vh; }
   .page { min-height: 100vh; display: flex; flex-direction: column; animation: fadeIn 0.15s ease; }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
@@ -48,17 +48,17 @@ const css = `
   .top-main { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
   .logo { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; color: var(--ink); }
   .top-meta { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
-  .guide-btn { background: none; border: 1px solid var(--rule); border-radius: 4px; padding: 3px 8px; font-size: 11px; font-weight: 500; color: var(--mid); cursor: pointer; font-family: 'Noto Sans KR', sans-serif; }
+  .guide-btn { background: none; border: 1px solid var(--rule); border-radius: 4px; padding: 3px 8px; font-size: 11px; font-weight: 500; color: var(--mid); cursor: pointer; font-family: var(--font); }
   .top-date { font-size: 10px; color: var(--muted); padding-top: 4px; border-top: 1px solid var(--rule); }
 
-  .back-btn { display: flex; align-items: center; gap: 4px; background: none; border: none; font-family: 'Noto Sans KR', sans-serif; font-size: 13px; font-weight: 500; color: var(--blue); cursor: pointer; padding: 2px 0; }
+  .back-btn { display: flex; align-items: center; gap: 4px; background: none; border: none; font-family: var(--font); font-size: 13px; font-weight: 500; color: var(--blue); cursor: pointer; padding: 2px 0; }
   .back-btn::before { content: '←'; font-size: 15px; }
   .page-label { font-size: 13px; font-weight: 500; color: var(--ink); }
 
   /* Tab bar */
   .cat-bar { display: flex; overflow-x: auto; border-bottom: 2px solid var(--rule); background: var(--paper); position: sticky; top: 61px; z-index: 9; }
   .cat-bar::-webkit-scrollbar { display: none; }
-  .cat-tab { padding: 10px 14px; font-size: 13px; font-weight: 400; color: var(--muted); background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; flex-shrink: 0; font-family: 'Noto Sans KR', sans-serif; margin-bottom: -2px; }
+  .cat-tab { padding: 10px 14px; font-size: 13px; font-weight: 400; color: var(--muted); background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; flex-shrink: 0; font-family: var(--font); margin-bottom: -2px; }
   .cat-tab.active { color: var(--blue); font-weight: 700; border-bottom-color: var(--blue); }
 
   /* Portal */
@@ -77,6 +77,7 @@ const css = `
   .art-info { flex: 1; min-width: 0; }
   .art-title { font-size: 15px; font-weight: 500; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 4px; color: var(--ink); }
   .art-sub { font-size: 11px; color: var(--muted); }
+  .art-cat { color: var(--ink); font-weight: 700; }
   .art-source { color: var(--blue); font-weight: 500; }
   .art-del { background: none; border: none; font-size: 14px; color: var(--rule); cursor: pointer; flex-shrink: 0; padding: 2px 4px; }
   .art-del:active { color: #cc0000; }
@@ -89,25 +90,25 @@ const css = `
   .input-body { flex: 1; display: flex; flex-direction: column; padding: 16px 12px; gap: 14px; }
   .field-label { font-size: 11px; font-weight: 700; color: var(--mid); margin-bottom: 6px; }
   .cat-picker { display: flex; flex-wrap: wrap; gap: 7px; }
-  .cat-pick-btn { padding: 6px 13px; border-radius: 4px; border: 1px solid var(--rule); background: var(--paper); color: var(--mid); font-family: 'Noto Sans KR', sans-serif; font-size: 12px; cursor: pointer; }
+  .cat-pick-btn { padding: 6px 13px; border-radius: 4px; border: 1px solid var(--rule); background: var(--paper); color: var(--mid); font-family: var(--font); font-size: 12px; cursor: pointer; }
   .cat-pick-btn.on { background: var(--blue); color: #fff; border-color: var(--blue); }
-  .url-input { width: 100%; border: 1px solid var(--rule); border-radius: 4px; padding: 10px 12px; font-family: 'Noto Sans KR', sans-serif; font-size: 14px; color: var(--ink); background: var(--paper); outline: none; }
+  .url-input { width: 100%; border: 1px solid var(--rule); border-radius: 4px; padding: 10px 12px; font-family: var(--font); font-size: 14px; color: var(--ink); background: var(--paper); outline: none; }
   .url-input:focus { border-color: var(--blue); }
   .url-input::placeholder { color: var(--muted); }
-  .article-ta { flex: 1; border: 1px solid var(--rule); border-radius: 4px; padding: 12px; font-family: 'Noto Sans KR', sans-serif; font-size: 14px; font-weight: 400; line-height: 1.75; color: var(--ink); background: var(--paper); outline: none; resize: none; min-height: 340px; width: 100%; transition: border-color 0.15s; }
+  .article-ta { flex: 1; border: 1px solid var(--rule); border-radius: 4px; padding: 12px; font-family: var(--font); font-size: 14px; font-weight: 400; line-height: 1.75; color: var(--ink); background: var(--paper); outline: none; resize: none; min-height: 340px; width: 100%; transition: border-color 0.15s; }
   .article-ta:focus { border-color: var(--blue); }
   .article-ta::placeholder { color: var(--muted); }
   .preview-box { background: #F0F4FA; border-radius: 4px; padding: 10px 12px; }
   .preview-source { font-size: 11px; color: var(--blue); font-weight: 700; margin-bottom: 3px; }
   .preview-title { font-size: 14px; font-weight: 500; color: var(--ink); }
-  .save-btn { background: var(--blue); color: #fff; border: none; border-radius: 4px; padding: 14px; font-family: 'Noto Sans KR', sans-serif; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .save-btn { background: var(--blue); color: #fff; border: none; border-radius: 4px; padding: 14px; font-family: var(--font); font-size: 14px; font-weight: 700; cursor: pointer; }
   .save-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
   /* EDIT */
   .edit-body { flex: 1; display: flex; flex-direction: column; padding: 16px 12px; gap: 14px; }
-  .edit-ta { flex: 1; border: 1px solid var(--rule); border-radius: 4px; padding: 12px; font-family: 'Noto Sans KR', sans-serif; font-size: 14px; font-weight: 400; line-height: 1.75; color: var(--ink); background: var(--paper); outline: none; resize: none; min-height: 340px; width: 100%; }
+  .edit-ta { flex: 1; border: 1px solid var(--rule); border-radius: 4px; padding: 12px; font-family: var(--font); font-size: 14px; font-weight: 400; line-height: 1.75; color: var(--ink); background: var(--paper); outline: none; resize: none; min-height: 340px; width: 100%; }
   .edit-ta:focus { border-color: var(--blue); }
-  .edit-save-btn { background: var(--blue); color: #fff; border: none; border-radius: 4px; padding: 14px; font-family: 'Noto Sans KR', sans-serif; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .edit-save-btn { background: var(--blue); color: #fff; border: none; border-radius: 4px; padding: 14px; font-family: var(--font); font-size: 14px; font-weight: 700; cursor: pointer; }
 
   /* DETAIL */
   .detail-body { flex: 1; overflow-y: auto; padding: 20px 16px 80px; }
@@ -117,44 +118,44 @@ const css = `
   .dv-date { font-size: 11px; color: var(--muted); padding-bottom: 16px; border-bottom: 1px solid var(--rule); margin-bottom: 16px; }
   .dv-url { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
   .dv-url-text { font-size: 12px; color: var(--blue); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none; }
-  .copy-btn { background: none; border: 1px solid var(--rule); border-radius: 4px; padding: 4px 10px; font-size: 11px; font-weight: 700; color: var(--mid); cursor: pointer; white-space: nowrap; font-family: 'Noto Sans KR', sans-serif; flex-shrink: 0; }
+  .copy-btn { background: none; border: 1px solid var(--rule); border-radius: 4px; padding: 4px 10px; font-size: 11px; font-weight: 700; color: var(--mid); cursor: pointer; white-space: nowrap; font-family: var(--font); flex-shrink: 0; }
   .copy-btn.copied { color: var(--blue); border-color: var(--blue); }
-  .dv-toggle { font-size: 13px; font-weight: 500; color: var(--blue); background: none; border: 1px solid var(--rule); border-radius: 4px; padding: 10px 14px; cursor: pointer; width: 100%; text-align: left; font-family: 'Noto Sans KR', sans-serif; }
+  .dv-toggle { font-size: 13px; font-weight: 500; color: var(--blue); background: none; border: 1px solid var(--rule); border-radius: 4px; padding: 10px 14px; cursor: pointer; width: 100%; text-align: left; font-family: var(--font); }
   .dv-full { font-size: 15px; line-height: 1.9; font-weight: 400; color: var(--ink); white-space: pre-wrap; margin-top: 14px; }
   .detail-btns { display: flex; gap: 8px; margin-top: 28px; }
-  .edit-btn { flex: 1; padding: 13px; border: 1px solid var(--blue); border-radius: 4px; background: none; color: var(--blue); font-family: 'Noto Sans KR', sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; }
-  .del-btn { flex: 1; padding: 13px; border: 1px solid #FFCCCC; border-radius: 4px; background: #FFF5F5; color: #CC0000; font-family: 'Noto Sans KR', sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .edit-btn { flex: 1; padding: 13px; border: 1px solid var(--blue); border-radius: 4px; background: none; color: var(--blue); font-family: var(--font); font-size: 13px; font-weight: 700; cursor: pointer; }
+  .del-btn { flex: 1; padding: 13px; border: 1px solid #FFCCCC; border-radius: 4px; background: #FFF5F5; color: #CC0000; font-family: var(--font); font-size: 13px; font-weight: 700; cursor: pointer; }
 
-  /* GUIDE / CAT EDIT */
+  /* GUIDE */
   .guide-body { flex: 1; overflow-y: auto; padding: 16px 16px 60px; }
   .guide-intro { font-size: 13px; color: var(--mid); margin-bottom: 16px; line-height: 1.6; }
   .guide-item { padding: 14px 0; border-bottom: 1px solid var(--rule); }
   .guide-name { font-size: 16px; font-weight: 700; margin-bottom: 3px; }
   .guide-sub { font-size: 12px; font-weight: 700; color: var(--blue); margin-bottom: 4px; }
   .guide-desc { font-size: 13px; color: var(--mid); line-height: 1.6; }
-  .edit-cats-btn { background: var(--blue); color: #fff; border: none; border-radius: 4px; padding: 10px 16px; font-family: 'Noto Sans KR', sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; margin-bottom: 16px; width: 100%; }
+  .edit-cats-btn { background: var(--blue); color: #fff; border: none; border-radius: 4px; padding: 10px 16px; font-family: var(--font); font-size: 13px; font-weight: 700; cursor: pointer; margin-bottom: 16px; width: 100%; }
 
-  /* CAT EDIT SCREEN */
+  /* CAT EDIT */
   .cat-edit-body { flex: 1; overflow-y: auto; padding: 16px; }
   .cat-edit-intro { font-size: 13px; color: var(--mid); margin-bottom: 16px; line-height: 1.6; }
   .cat-edit-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
   .cat-edit-row { display: flex; align-items: center; gap: 8px; background: var(--paper); border: 1px solid var(--rule); border-radius: 4px; padding: 10px 12px; }
-  .cat-edit-input { flex: 1; border: none; outline: none; font-family: 'Noto Sans KR', sans-serif; font-size: 14px; color: var(--ink); background: transparent; }
+  .cat-edit-input { flex: 1; border: none; outline: none; font-family: var(--font); font-size: 14px; color: var(--ink); background: transparent; }
   .cat-edit-del { background: none; border: none; font-size: 16px; color: var(--muted); cursor: pointer; padding: 2px 4px; }
   .cat-edit-del:active { color: #cc0000; }
-  .cat-add-btn { width: 100%; padding: 12px; border: 1px dashed var(--rule); border-radius: 4px; background: none; color: var(--blue); font-family: 'Noto Sans KR', sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; margin-bottom: 16px; }
-  .cat-save-btn { width: 100%; padding: 14px; background: var(--blue); color: #fff; border: none; border-radius: 4px; font-family: 'Noto Sans KR', sans-serif; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .cat-add-btn { width: 100%; padding: 12px; border: 1px dashed var(--rule); border-radius: 4px; background: none; color: var(--blue); font-family: var(--font); font-size: 13px; font-weight: 700; cursor: pointer; margin-bottom: 16px; }
+  .cat-save-btn { width: 100%; padding: 14px; background: var(--blue); color: #fff; border: none; border-radius: 4px; font-family: var(--font); font-size: 14px; font-weight: 700; cursor: pointer; }
 
   /* Confirm sheet */
   .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: flex-end; justify-content: center; z-index: 200; }
   .confirm-sheet { background: var(--paper); border-radius: 14px 14px 0 0; padding: 24px 16px 40px; width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 10px; animation: slideUp 0.2s ease; }
   @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
   .confirm-msg { font-size: 15px; text-align: center; color: var(--ink); padding-bottom: 8px; }
-  .confirm-yes { padding: 14px; border: none; border-radius: 8px; background: #CC0000; color: #fff; font-family: 'Noto Sans KR', sans-serif; font-size: 15px; font-weight: 700; cursor: pointer; }
-  .confirm-no { padding: 14px; border: 1px solid var(--rule); border-radius: 8px; background: none; color: var(--mid); font-family: 'Noto Sans KR', sans-serif; font-size: 15px; cursor: pointer; }
+  .confirm-yes { padding: 14px; border: none; border-radius: 8px; background: #CC0000; color: #fff; font-family: var(--font); font-size: 15px; font-weight: 700; cursor: pointer; }
+  .confirm-no { padding: 14px; border: 1px solid var(--rule); border-radius: 8px; background: none; color: var(--mid); font-family: var(--font); font-size: 15px; cursor: pointer; }
 
   /* Toast */
-  .toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 8px 18px; border-radius: 20px; font-size: 13px; z-index: 300; animation: fadeIn 0.2s ease; }
+  .toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 8px 18px; border-radius: 20px; font-size: 13px; z-index: 300; white-space: nowrap; }
 `;
 
 function ConfirmSheet({ onConfirm, onCancel }) {
@@ -189,31 +190,36 @@ export default function Newspaper() {
   const screen = history[history.length - 1];
 
   const goTo = (s) => {
-    window.history.pushState({ idx: history.length }, "");
+    window.history.pushState({ len: history.length + 1 }, "");
     setHistory(prev => [...prev, s]);
   };
-  const goBack = () => setHistory(prev => prev.length > 1 ? prev.slice(0, -1) : prev);
 
-  // 기기 뒤로가기 — 첫화면에서는 막고 나머지는 이전 화면으로
+  const goBack = () => {
+    setHistory(prev => prev.length > 1 ? prev.slice(0, -1) : prev);
+  };
+
+  // 기기 뒤로가기 — 항상 스택에 상태 유지해서 앱 종료 방지
   useEffect(() => {
-    const handler = (e) => {
+    // 초기 스택 2개 쌓기 (앱 종료 방지)
+    window.history.pushState({ len: 1 }, "");
+    window.history.pushState({ len: 2 }, "");
+
+    const handler = () => {
       setHistory(prev => {
         if (prev.length > 1) {
-          window.history.pushState({ idx: prev.length - 1 }, "");
+          // 뒤로가기 — 스택 다시 채우기
+          window.history.pushState({ len: prev.length }, "");
           return prev.slice(0, -1);
         } else {
-          // 첫화면 — 브라우저 기본 동작(종료) 허용 안 하고 그냥 유지
-          window.history.pushState({ idx: 0 }, "");
+          // 첫화면 — 종료 막고 스택 다시 채우기
+          window.history.pushState({ len: 1 }, "");
+          window.history.pushState({ len: 2 }, "");
           return prev;
         }
       });
     };
     window.addEventListener("popstate", handler);
     return () => window.removeEventListener("popstate", handler);
-  }, []);
-
-  useEffect(() => {
-    window.history.pushState({ idx: 0 }, "");
   }, []);
 
   useEffect(() => {
@@ -250,6 +256,8 @@ export default function Newspaper() {
     setInputText("");
     setInputUrl("");
     setHistory(["home", "detail"]);
+    window.history.pushState({ len: 2 }, "");
+    window.history.pushState({ len: 3 }, "");
   };
 
   const handleEditSave = () => {
@@ -262,6 +270,8 @@ export default function Newspaper() {
     setArticles(prev => prev.filter(a => a.id !== confirmId));
     setConfirmId(null);
     setHistory(["home"]);
+    window.history.pushState({ len: 1 }, "");
+    window.history.pushState({ len: 2 }, "");
   };
 
   const handleCopy = (url) => {
@@ -282,17 +292,21 @@ export default function Newspaper() {
 
   const tabs = ["전체", ...cats];
   const filtered = activeTab === "전체" ? articles : articles.filter(a => a.category === activeTab);
-  const sections = cats.map(cat => ({ cat, items: articles.filter(a => a.category === cat) })).filter(s => s.items.length > 0);
   const active = articles.find(a => a.id === activeId);
 
-  const openDetail = (id) => { setActiveId(id); setShowFull(false); goTo("detail"); };
+  const openDetail = (id) => {
+    setActiveId(id);
+    setShowFull(false);
+    goTo("detail");
+  };
 
-  const ArtRow = ({ a, i, total }) => (
+  const ArtRow = ({ a, i, total, showCat }) => (
     <div className="art-row" onClick={() => openDetail(a.id)}>
       <div className="art-num">{String(total - i).padStart(2, "0")}</div>
       <div className="art-info">
         <div className="art-title">{a.title}</div>
         <div className="art-sub">
+          {showCat && a.category && <span className="art-cat">{a.category} · </span>}
           {a.source && <span className="art-source">{a.source} · </span>}
           {fmtDate(a.savedAt)}
         </div>
@@ -315,7 +329,7 @@ export default function Newspaper() {
               <div className="logo">Newspaper</div>
               <div className="top-meta">
                 <button className="guide-btn" onClick={() => goTo("guide")}>섹션 안내</button>
-                <span>v3.1 · {articles.length}개</span>
+                <span>v3.2 · {articles.length}개</span>
               </div>
             </div>
             <div className="top-date">{todayStr()}</div>
@@ -331,13 +345,13 @@ export default function Newspaper() {
             <div className="portal">
               {filtered.length === 0
                 ? <div style={{padding:"20px", color:"var(--muted)", fontSize:"13px"}}>기사가 없습니다</div>
-                : filtered.map((a, i) => <ArtRow key={a.id} a={a} i={i} total={filtered.length} />)
+                : filtered.map((a, i) => <ArtRow key={a.id} a={a} i={i} total={filtered.length} showCat={false} />)
               }
             </div>
           ) : (
             <div className="portal">
               {[...articles].sort((a, b) => b.savedAt.localeCompare(a.savedAt)).map((a, i) => (
-                <ArtRow key={a.id} a={a} i={i} total={articles.length} />
+                <ArtRow key={a.id} a={a} i={i} total={articles.length} showCat={true} />
               ))}
             </div>
           )}
@@ -368,8 +382,14 @@ export default function Newspaper() {
               <input className="url-input" type="url" placeholder="https://..." value={inputUrl} onChange={e => setInputUrl(e.target.value)} />
             </div>
             <div>
-              <div className="field-label">기사 본문 (첫 줄에 신문사명)</div>
-              <textarea className="article-ta" placeholder={"조선일보\n기사 제목\n기사 내용..."} value={inputText} onChange={e => setInputText(e.target.value)} autoFocus />
+              <div className="field-label">기사 본문 (첫 줄에 신문사 이름)</div>
+              <textarea
+                className="article-ta"
+                placeholder={"신문사 이름\n기사 제목\n기사 내용..."}
+                value={inputText}
+                onChange={e => setInputText(e.target.value)}
+                autoFocus
+              />
             </div>
             {inputText.trim().length > 0 && (
               <div>
