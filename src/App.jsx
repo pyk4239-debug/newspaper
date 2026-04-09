@@ -179,6 +179,7 @@ export default function Newspaper() {
   const [selectedCat, setSelectedCat] = useState("");
   const [activeId, setActiveId] = useState(null);
   const [editText, setEditText] = useState("");
+  const [editCat, setEditCat] = useState("");
   const [showFull, setShowFull] = useState(false);
   const [confirmId, setConfirmId] = useState(null);
   const [copied, setCopied] = useState(false);
@@ -188,25 +189,31 @@ export default function Newspaper() {
   const screen = history[history.length - 1];
 
   const goTo = (s) => {
-    window.history.pushState({}, "");
+    window.history.pushState({ idx: history.length }, "");
     setHistory(prev => [...prev, s]);
   };
   const goBack = () => setHistory(prev => prev.length > 1 ? prev.slice(0, -1) : prev);
 
-  // 기기 뒤로가기
+  // 기기 뒤로가기 — 첫화면에서는 막고 나머지는 이전 화면으로
   useEffect(() => {
-    const handler = () => {
-      if (history.length > 1) {
-        setHistory(prev => prev.slice(0, -1));
-        window.history.pushState({}, "");
-      }
+    const handler = (e) => {
+      setHistory(prev => {
+        if (prev.length > 1) {
+          window.history.pushState({ idx: prev.length - 1 }, "");
+          return prev.slice(0, -1);
+        } else {
+          // 첫화면 — 브라우저 기본 동작(종료) 허용 안 하고 그냥 유지
+          window.history.pushState({ idx: 0 }, "");
+          return prev;
+        }
+      });
     };
     window.addEventListener("popstate", handler);
     return () => window.removeEventListener("popstate", handler);
-  }, [history]);
+  }, []);
 
   useEffect(() => {
-    window.history.pushState({}, "");
+    window.history.pushState({ idx: 0 }, "");
   }, []);
 
   useEffect(() => {
@@ -247,7 +254,7 @@ export default function Newspaper() {
 
   const handleEditSave = () => {
     const { source, title } = extractMeta(editText);
-    setArticles(prev => prev.map(a => a.id === activeId ? { ...a, title, source, fullText: editText } : a));
+    setArticles(prev => prev.map(a => a.id === activeId ? { ...a, title, source, fullText: editText, category: editCat } : a));
     goBack();
   };
 
@@ -308,7 +315,7 @@ export default function Newspaper() {
               <div className="logo">Newspaper</div>
               <div className="top-meta">
                 <button className="guide-btn" onClick={() => goTo("guide")}>섹션 안내</button>
-                <span>v3 · {articles.length}개</span>
+                <span>v3.1 · {articles.length}개</span>
               </div>
             </div>
             <div className="top-date">{todayStr()}</div>
@@ -404,7 +411,7 @@ export default function Newspaper() {
             </button>
             {showFull && <div className="dv-full">{active.fullText}</div>}
             <div className="detail-btns">
-              <button className="edit-btn" onClick={() => { setEditText(active.fullText); goTo("edit"); }}>수정</button>
+              <button className="edit-btn" onClick={() => { setEditText(active.fullText); setEditCat(active.category); goTo("edit"); }}>수정</button>
               <button className="del-btn" onClick={() => setConfirmId(active.id)}>삭제</button>
             </div>
           </div>
@@ -421,6 +428,14 @@ export default function Newspaper() {
             </div>
           </div>
           <div className="edit-body">
+            <div>
+              <div className="field-label">섹션 변경</div>
+              <div className="cat-picker">
+                {cats.map(c => (
+                  <button key={c} className={`cat-pick-btn${editCat === c ? " on" : ""}`} onClick={() => setEditCat(c)}>{c}</button>
+                ))}
+              </div>
+            </div>
             <textarea className="edit-ta" value={editText} onChange={e => setEditText(e.target.value)} autoFocus />
             <button className="edit-save-btn" onClick={handleEditSave}>저장</button>
           </div>
