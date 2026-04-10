@@ -1,18 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
-const STORAGE_KEY = "newspaper_v3";
-const CATS_KEY = "newspaper_cats";
-const DEFAULT_CATS = ["정치·세계", "경제", "사회", "기술", "문화", "스포츠", "라이프"];
-
-const CAT_DESC = {
-  "정치·세계": { sub: "국내정치 · 외교 · 국제정세 · 분쟁", desc: "국내외 정치 뉴스, 선거, 외교, 전쟁, 글로벌 이슈" },
-  "경제":      { sub: "주식 · 부동산 · 환율 · 재테크", desc: "증시, 환율, 부동산, 거시경제, 기업 실적" },
-  "사회":      { sub: "사건사고 · 교육 · 환경 · 복지", desc: "국내 사건사고, 교육 정책, 기후·환경, 사회 이슈" },
-  "기술":      { sub: "AI · IT · 과학 · 우주", desc: "인공지능, 테크 기업, 신기술, 과학 발견, 우주 탐사" },
-  "문화":      { sub: "영화 · 음악 · 책 · 예술 · 엔터", desc: "영화, 드라마, 음악, 전시, 공연, 연예 뉴스" },
-  "스포츠":    { sub: "축구 · 야구 · 농구 · 올림픽", desc: "국내외 모든 스포츠 경기, 선수, 팀 소식" },
-  "라이프":    { sub: "건강 · 음식 · 여행 · 일상", desc: "건강 정보, 맛집, 여행지, 쇼핑, 생활 팁" },
-};
+const STORAGE_KEY = "newspaper_v4";
+const CATS_KEY = "newspaper_cats_v4";
+const DEFAULT_CATS = [
+  { name: "정치·세계", sub: "국내정치 · 외교 · 국제정세 · 분쟁", desc: "국내외 정치 뉴스, 선거, 외교, 전쟁, 글로벌 이슈" },
+  { name: "경제",      sub: "주식 · 부동산 · 환율 · 재테크",      desc: "증시, 환율, 부동산, 거시경제, 기업 실적" },
+  { name: "사회",      sub: "사건사고 · 교육 · 환경 · 복지",      desc: "국내 사건사고, 교육 정책, 기후·환경, 사회 이슈" },
+  { name: "기술",      sub: "AI · IT · 과학 · 우주",              desc: "인공지능, 테크 기업, 신기술, 과학 발견, 우주 탐사" },
+  { name: "문화",      sub: "영화 · 음악 · 책 · 예술 · 엔터",     desc: "영화, 드라마, 음악, 전시, 공연, 연예 뉴스" },
+  { name: "스포츠",    sub: "축구 · 야구 · 농구 · 올림픽",        desc: "국내외 모든 스포츠 경기, 선수, 팀 소식" },
+  { name: "라이프",    sub: "건강 · 음식 · 여행 · 일상",          desc: "건강 정보, 맛집, 여행지, 쇼핑, 생활 팁" },
+];
 
 function extractMeta(text) {
   const lines = text.trim().split("\n").map(l => l.trim()).filter(Boolean);
@@ -32,6 +30,30 @@ function extractMeta(text) {
 const fmtDate = (iso) => new Date(iso).toLocaleDateString("ko-KR", { month: "long", day: "numeric" });
 const todayStr = () => new Date().toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long" });
 
+// 이미지 압축 (max 800px, quality 0.7)
+function compressImage(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const MAX = 800;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", 0.7));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 const css = `
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -43,7 +65,6 @@ const css = `
   .page { min-height: 100vh; display: flex; flex-direction: column; animation: fadeIn 0.15s ease; }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-  /* Top bar */
   .top-bar { padding: 12px 16px 10px; border-bottom: 1px solid var(--ink); background: var(--paper); position: sticky; top: 0; z-index: 10; }
   .top-main { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
   .logo { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; color: var(--ink); }
@@ -55,21 +76,14 @@ const css = `
   .back-btn::before { content: '←'; font-size: 15px; }
   .page-label { font-size: 13px; font-weight: 500; color: var(--ink); }
 
-  /* Tab bar */
   .cat-bar { display: flex; overflow-x: auto; border-bottom: 2px solid var(--rule); background: var(--paper); position: sticky; top: 61px; z-index: 9; }
   .cat-bar::-webkit-scrollbar { display: none; }
   .cat-tab { padding: 10px 14px; font-size: 13px; font-weight: 400; color: var(--muted); background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; flex-shrink: 0; font-family: var(--font); margin-bottom: -2px; }
   .cat-tab.active { color: var(--blue); font-weight: 700; border-bottom-color: var(--blue); }
 
-  /* Portal */
   .portal { flex: 1; padding-bottom: 80px; background: var(--bg); }
   .empty-portal { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--muted); padding: 60px 20px; text-align: center; }
   .empty-txt { font-size: 14px; line-height: 1.7; }
-
-  .section-divider { height: 6px; background: var(--bg); }
-  .section-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 6px; background: var(--paper); }
-  .section-title { font-size: 13px; font-weight: 700; color: var(--ink); }
-  .section-count { font-size: 11px; color: var(--muted); }
 
   .art-row { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--rule); cursor: pointer; background: var(--paper); }
   .art-row:active { background: #F0F4FA; }
@@ -79,15 +93,15 @@ const css = `
   .art-sub { font-size: 11px; color: var(--muted); }
   .art-cat { color: var(--ink); font-weight: 700; }
   .art-source { color: var(--blue); font-weight: 500; }
+  .art-thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
   .art-del { background: none; border: none; font-size: 14px; color: var(--rule); cursor: pointer; flex-shrink: 0; padding: 2px 4px; }
   .art-del:active { color: #cc0000; }
 
-  /* FAB */
   .fab { position: fixed; bottom: 24px; right: 20px; width: 52px; height: 52px; border-radius: 50%; background: var(--blue); color: #fff; border: none; font-size: 26px; cursor: pointer; box-shadow: 0 2px 12px rgba(0,102,204,0.4); display: flex; align-items: center; justify-content: center; transition: transform 0.15s; z-index: 20; }
   .fab:active { transform: scale(0.92); }
 
   /* INPUT */
-  .input-body { flex: 1; display: flex; flex-direction: column; padding: 16px 12px; gap: 14px; }
+  .input-body { flex: 1; display: flex; flex-direction: column; padding: 16px 12px; gap: 14px; overflow-y: auto; }
   .field-label { font-size: 11px; font-weight: 700; color: var(--mid); margin-bottom: 6px; }
   .cat-picker { display: flex; flex-wrap: wrap; gap: 7px; }
   .cat-pick-btn { padding: 6px 13px; border-radius: 4px; border: 1px solid var(--rule); background: var(--paper); color: var(--mid); font-family: var(--font); font-size: 12px; cursor: pointer; }
@@ -95,7 +109,16 @@ const css = `
   .url-input { width: 100%; border: 1px solid var(--rule); border-radius: 4px; padding: 10px 12px; font-family: var(--font); font-size: 14px; color: var(--ink); background: var(--paper); outline: none; }
   .url-input:focus { border-color: var(--blue); }
   .url-input::placeholder { color: var(--muted); }
-  .article-ta { flex: 1; border: 1px solid var(--rule); border-radius: 4px; padding: 12px; font-family: var(--font); font-size: 14px; font-weight: 400; line-height: 1.75; color: var(--ink); background: var(--paper); outline: none; resize: none; min-height: 340px; width: 100%; transition: border-color 0.15s; }
+
+  /* Photo upload */
+  .photo-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .photo-thumb-wrap { position: relative; }
+  .photo-thumb { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; display: block; }
+  .photo-del { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; background: #cc0000; color: #fff; border: none; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .photo-add { width: 72px; height: 72px; border: 1.5px dashed var(--rule); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 24px; color: var(--muted); cursor: pointer; background: var(--paper); flex-shrink: 0; }
+  .photo-add:active { background: #F0F4FA; }
+
+  .article-ta { flex: 1; border: 1px solid var(--rule); border-radius: 4px; padding: 12px; font-family: var(--font); font-size: 14px; font-weight: 400; line-height: 1.75; color: var(--ink); background: var(--paper); outline: none; resize: none; min-height: 300px; width: 100%; }
   .article-ta:focus { border-color: var(--blue); }
   .article-ta::placeholder { color: var(--muted); }
   .preview-box { background: #F0F4FA; border-radius: 4px; padding: 10px 12px; }
@@ -105,8 +128,8 @@ const css = `
   .save-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
   /* EDIT */
-  .edit-body { flex: 1; display: flex; flex-direction: column; padding: 16px 12px; gap: 14px; }
-  .edit-ta { flex: 1; border: 1px solid var(--rule); border-radius: 4px; padding: 12px; font-family: var(--font); font-size: 14px; font-weight: 400; line-height: 1.75; color: var(--ink); background: var(--paper); outline: none; resize: none; min-height: 340px; width: 100%; }
+  .edit-body { flex: 1; display: flex; flex-direction: column; padding: 16px 12px; gap: 14px; overflow-y: auto; }
+  .edit-ta { flex: 1; border: 1px solid var(--rule); border-radius: 4px; padding: 12px; font-family: var(--font); font-size: 14px; font-weight: 400; line-height: 1.75; color: var(--ink); background: var(--paper); outline: none; resize: none; min-height: 300px; width: 100%; }
   .edit-ta:focus { border-color: var(--blue); }
   .edit-save-btn { background: var(--blue); color: #fff; border: none; border-radius: 4px; padding: 14px; font-family: var(--font); font-size: 14px; font-weight: 700; cursor: pointer; }
 
@@ -116,6 +139,8 @@ const css = `
   .dv-cat { font-size: 11px; color: var(--muted); margin-bottom: 10px; }
   .dv-title { font-size: 22px; font-weight: 700; line-height: 1.4; margin-bottom: 8px; color: var(--ink); }
   .dv-date { font-size: 11px; color: var(--muted); padding-bottom: 16px; border-bottom: 1px solid var(--rule); margin-bottom: 16px; }
+  .dv-photos { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .dv-photo { width: 100%; max-height: 240px; object-fit: cover; border-radius: 6px; display: block; }
   .dv-url { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
   .dv-url-text { font-size: 12px; color: var(--blue); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none; }
   .copy-btn { background: none; border: 1px solid var(--rule); border-radius: 4px; padding: 4px 10px; font-size: 11px; font-weight: 700; color: var(--mid); cursor: pointer; white-space: nowrap; font-family: var(--font); flex-shrink: 0; }
@@ -138,15 +163,18 @@ const css = `
   /* CAT EDIT */
   .cat-edit-body { flex: 1; overflow-y: auto; padding: 16px; }
   .cat-edit-intro { font-size: 13px; color: var(--mid); margin-bottom: 16px; line-height: 1.6; }
-  .cat-edit-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
-  .cat-edit-row { display: flex; align-items: center; gap: 8px; background: var(--paper); border: 1px solid var(--rule); border-radius: 4px; padding: 10px 12px; }
-  .cat-edit-input { flex: 1; border: none; outline: none; font-family: var(--font); font-size: 14px; color: var(--ink); background: transparent; }
-  .cat-edit-del { background: none; border: none; font-size: 16px; color: var(--muted); cursor: pointer; padding: 2px 4px; }
+  .cat-edit-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+  .cat-edit-card { background: var(--paper); border: 1px solid var(--rule); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .cat-edit-card-top { display: flex; align-items: center; gap: 8px; }
+  .cat-edit-name { flex: 1; border: none; border-bottom: 1px solid var(--rule); outline: none; font-family: var(--font); font-size: 15px; font-weight: 700; color: var(--ink); background: transparent; padding-bottom: 4px; }
+  .cat-edit-sub { width: 100%; border: 1px solid var(--rule); border-radius: 4px; outline: none; font-family: var(--font); font-size: 12px; color: var(--mid); background: var(--bg); padding: 7px 10px; }
+  .cat-edit-desc { width: 100%; border: 1px solid var(--rule); border-radius: 4px; outline: none; font-family: var(--font); font-size: 12px; color: var(--mid); background: var(--bg); padding: 7px 10px; resize: none; min-height: 60px; }
+  .cat-edit-del { background: none; border: none; font-size: 16px; color: var(--muted); cursor: pointer; padding: 2px 4px; flex-shrink: 0; }
   .cat-edit-del:active { color: #cc0000; }
   .cat-add-btn { width: 100%; padding: 12px; border: 1px dashed var(--rule); border-radius: 4px; background: none; color: var(--blue); font-family: var(--font); font-size: 13px; font-weight: 700; cursor: pointer; margin-bottom: 16px; }
   .cat-save-btn { width: 100%; padding: 14px; background: var(--blue); color: #fff; border: none; border-radius: 4px; font-family: var(--font); font-size: 14px; font-weight: 700; cursor: pointer; }
 
-  /* Confirm sheet */
+  /* Confirm */
   .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: flex-end; justify-content: center; z-index: 200; }
   .confirm-sheet { background: var(--paper); border-radius: 14px 14px 0 0; padding: 24px 16px 40px; width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 10px; animation: slideUp 0.2s ease; }
   @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
@@ -154,7 +182,6 @@ const css = `
   .confirm-yes { padding: 14px; border: none; border-radius: 8px; background: #CC0000; color: #fff; font-family: var(--font); font-size: 15px; font-weight: 700; cursor: pointer; }
   .confirm-no { padding: 14px; border: 1px solid var(--rule); border-radius: 8px; background: none; color: var(--mid); font-family: var(--font); font-size: 15px; cursor: pointer; }
 
-  /* Toast */
   .toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 8px 18px; border-radius: 20px; font-size: 13px; z-index: 300; white-space: nowrap; }
 `;
 
@@ -177,41 +204,38 @@ export default function Newspaper() {
   const [activeTab, setActiveTab] = useState("전체");
   const [inputText, setInputText] = useState("");
   const [inputUrl, setInputUrl] = useState("");
+  const [inputPhotos, setInputPhotos] = useState([]);
   const [selectedCat, setSelectedCat] = useState("");
   const [activeId, setActiveId] = useState(null);
   const [editText, setEditText] = useState("");
   const [editCat, setEditCat] = useState("");
+  const [editPhotos, setEditPhotos] = useState([]);
   const [showFull, setShowFull] = useState(false);
   const [confirmId, setConfirmId] = useState(null);
   const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState("");
   const [editCats, setEditCats] = useState([]);
+  const photoInputRef = useRef(null);
+  const editPhotoInputRef = useRef(null);
 
   const screen = history[history.length - 1];
+  const catNames = cats.map(c => c.name);
 
   const goTo = (s) => {
     window.history.pushState({ len: history.length + 1 }, "");
     setHistory(prev => [...prev, s]);
   };
+  const goBack = () => setHistory(prev => prev.length > 1 ? prev.slice(0, -1) : prev);
 
-  const goBack = () => {
-    setHistory(prev => prev.length > 1 ? prev.slice(0, -1) : prev);
-  };
-
-  // 기기 뒤로가기 — 항상 스택에 상태 유지해서 앱 종료 방지
   useEffect(() => {
-    // 초기 스택 2개 쌓기 (앱 종료 방지)
     window.history.pushState({ len: 1 }, "");
     window.history.pushState({ len: 2 }, "");
-
     const handler = () => {
       setHistory(prev => {
         if (prev.length > 1) {
-          // 뒤로가기 — 스택 다시 채우기
           window.history.pushState({ len: prev.length }, "");
           return prev.slice(0, -1);
         } else {
-          // 첫화면 — 종료 막고 스택 다시 채우기
           window.history.pushState({ len: 1 }, "");
           window.history.pushState({ len: 2 }, "");
           return prev;
@@ -235,26 +259,34 @@ export default function Newspaper() {
 
   useEffect(() => {
     try { localStorage.setItem(CATS_KEY, JSON.stringify(cats)); } catch {}
-    if (selectedCat && !cats.includes(selectedCat)) setSelectedCat(cats[0] || "");
   }, [cats]);
 
   useEffect(() => {
-    if (cats.length > 0 && !selectedCat) setSelectedCat(cats[0]);
+    if (cats.length > 0 && !selectedCat) setSelectedCat(cats[0].name);
   }, [cats]);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2000); };
 
   const { source: previewSource, title: previewTitle } = extractMeta(inputText);
 
+  const handlePhotoAdd = async (files, setter) => {
+    const arr = Array.from(files).slice(0, 2);
+    const compressed = await Promise.all(arr.map(compressImage));
+    setter(prev => [...prev, ...compressed].slice(0, 2));
+  };
+
   const handleSave = () => {
     if (inputText.trim().length < 10) return;
     const { source, title } = extractMeta(inputText);
-    const item = { id: Date.now(), title, source, category: selectedCat, fullText: inputText, url: inputUrl.trim(), savedAt: new Date().toISOString() };
+    const item = {
+      id: Date.now(), title, source, category: selectedCat,
+      fullText: inputText, url: inputUrl.trim(),
+      photos: inputPhotos, savedAt: new Date().toISOString()
+    };
     setArticles(prev => [item, ...prev]);
     setActiveId(item.id);
     setShowFull(false);
-    setInputText("");
-    setInputUrl("");
+    setInputText(""); setInputUrl(""); setInputPhotos([]);
     setHistory(["home", "detail"]);
     window.history.pushState({ len: 2 }, "");
     window.history.pushState({ len: 3 }, "");
@@ -262,7 +294,9 @@ export default function Newspaper() {
 
   const handleEditSave = () => {
     const { source, title } = extractMeta(editText);
-    setArticles(prev => prev.map(a => a.id === activeId ? { ...a, title, source, fullText: editText, category: editCat } : a));
+    setArticles(prev => prev.map(a =>
+      a.id === activeId ? { ...a, title, source, fullText: editText, category: editCat, photos: editPhotos } : a
+    ));
     goBack();
   };
 
@@ -276,32 +310,21 @@ export default function Newspaper() {
 
   const handleCopy = (url) => {
     navigator.clipboard.writeText(url).then(() => {
-      setCopied(true);
-      showToast("링크 복사됨!");
+      setCopied(true); showToast("링크 복사됨!");
       setTimeout(() => setCopied(false), 2000);
     });
   };
 
   const handleCatSave = () => {
-    const filtered = editCats.map(c => c.trim()).filter(Boolean);
-    if (filtered.length === 0) return;
-    setCats(filtered);
-    goBack();
-    showToast("섹션 저장됨!");
+    const filtered = editCats.filter(c => c.name.trim());
+    if (!filtered.length) return;
+    setCats(filtered); goBack(); showToast("섹션 저장됨!");
   };
 
-  const tabs = ["전체", ...cats];
-  const filtered = activeTab === "전체" ? articles : articles.filter(a => a.category === activeTab);
   const active = articles.find(a => a.id === activeId);
 
-  const openDetail = (id) => {
-    setActiveId(id);
-    setShowFull(false);
-    goTo("detail");
-  };
-
   const ArtRow = ({ a, i, total, showCat }) => (
-    <div className="art-row" onClick={() => openDetail(a.id)}>
+    <div className="art-row" onClick={() => { setActiveId(a.id); setShowFull(false); goTo("detail"); }}>
       <div className="art-num">{String(total - i).padStart(2, "0")}</div>
       <div className="art-info">
         <div className="art-title">{a.title}</div>
@@ -311,9 +334,13 @@ export default function Newspaper() {
           {fmtDate(a.savedAt)}
         </div>
       </div>
+      {a.photos?.[0] && <img className="art-thumb" src={a.photos[0]} alt="" />}
       <button className="art-del" onClick={e => { e.stopPropagation(); setConfirmId(a.id); }}>✕</button>
     </div>
   );
+
+  const sorted = [...articles].sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+  const filtered = activeTab === "전체" ? sorted : articles.filter(a => a.category === activeTab);
 
   return (
     <>
@@ -329,33 +356,26 @@ export default function Newspaper() {
               <div className="logo">Newspaper</div>
               <div className="top-meta">
                 <button className="guide-btn" onClick={() => goTo("guide")}>섹션 안내</button>
-                <span>v3.2 · {articles.length}개</span>
+                <span>v4 · {articles.length}개</span>
               </div>
             </div>
             <div className="top-date">{todayStr()}</div>
           </div>
           <div className="cat-bar">
-            {tabs.map(t => (
+            {["전체", ...catNames].map(t => (
               <button key={t} className={`cat-tab${activeTab === t ? " active" : ""}`} onClick={() => setActiveTab(t)}>{t}</button>
             ))}
           </div>
           {articles.length === 0 ? (
             <div className="empty-portal"><div className="empty-txt">아래 + 버튼으로<br/>기사를 클립하세요</div></div>
-          ) : activeTab !== "전체" ? (
-            <div className="portal">
-              {filtered.length === 0
-                ? <div style={{padding:"20px", color:"var(--muted)", fontSize:"13px"}}>기사가 없습니다</div>
-                : filtered.map((a, i) => <ArtRow key={a.id} a={a} i={i} total={filtered.length} showCat={false} />)
-              }
-            </div>
           ) : (
             <div className="portal">
-              {[...articles].sort((a, b) => b.savedAt.localeCompare(a.savedAt)).map((a, i) => (
-                <ArtRow key={a.id} a={a} i={i} total={articles.length} showCat={true} />
+              {(activeTab === "전체" ? sorted : filtered).map((a, i, arr) => (
+                <ArtRow key={a.id} a={a} i={i} total={arr.length} showCat={activeTab === "전체"} />
               ))}
             </div>
           )}
-          <button className="fab" onClick={() => { setInputText(""); setInputUrl(""); goTo("input"); }}>+</button>
+          <button className="fab" onClick={() => { setInputText(""); setInputUrl(""); setInputPhotos([]); goTo("input"); }}>+</button>
         </div>
       )}
 
@@ -372,9 +392,25 @@ export default function Newspaper() {
             <div>
               <div className="field-label">카테고리</div>
               <div className="cat-picker">
-                {cats.map(c => (
+                {catNames.map(c => (
                   <button key={c} className={`cat-pick-btn${selectedCat === c ? " on" : ""}`} onClick={() => setSelectedCat(c)}>{c}</button>
                 ))}
+              </div>
+            </div>
+            <div>
+              <div className="field-label">사진 (최대 2장)</div>
+              <div className="photo-row">
+                {inputPhotos.map((p, i) => (
+                  <div key={i} className="photo-thumb-wrap">
+                    <img className="photo-thumb" src={p} alt="" />
+                    <button className="photo-del" onClick={() => setInputPhotos(prev => prev.filter((_, j) => j !== i))}>✕</button>
+                  </div>
+                ))}
+                {inputPhotos.length < 2 && (
+                  <button className="photo-add" onClick={() => photoInputRef.current?.click()}>+</button>
+                )}
+                <input ref={photoInputRef} type="file" accept="image/*" multiple style={{display:"none"}}
+                  onChange={e => handlePhotoAdd(e.target.files, setInputPhotos)} />
               </div>
             </div>
             <div>
@@ -383,13 +419,7 @@ export default function Newspaper() {
             </div>
             <div>
               <div className="field-label">기사 본문 (첫 줄에 신문사 이름)</div>
-              <textarea
-                className="article-ta"
-                placeholder={"신문사 이름\n기사 제목\n기사 내용..."}
-                value={inputText}
-                onChange={e => setInputText(e.target.value)}
-                autoFocus
-              />
+              <textarea className="article-ta" placeholder={"신문사 이름\n기사 제목\n기사 내용..."} value={inputText} onChange={e => setInputText(e.target.value)} />
             </div>
             {inputText.trim().length > 0 && (
               <div>
@@ -418,6 +448,11 @@ export default function Newspaper() {
             <div className="dv-cat">{active.category}</div>
             <h1 className="dv-title">{active.title}</h1>
             <div className="dv-date">{fmtDate(active.savedAt)} 저장</div>
+            {active.photos?.length > 0 && (
+              <div className="dv-photos">
+                {active.photos.map((p, i) => <img key={i} className="dv-photo" src={p} alt="" />)}
+              </div>
+            )}
             {active.url && (
               <div className="dv-url">
                 <a className="dv-url-text" href={active.url} target="_blank" rel="noopener noreferrer">{active.url}</a>
@@ -431,7 +466,7 @@ export default function Newspaper() {
             </button>
             {showFull && <div className="dv-full">{active.fullText}</div>}
             <div className="detail-btns">
-              <button className="edit-btn" onClick={() => { setEditText(active.fullText); setEditCat(active.category); goTo("edit"); }}>수정</button>
+              <button className="edit-btn" onClick={() => { setEditText(active.fullText); setEditCat(active.category); setEditPhotos(active.photos || []); goTo("edit"); }}>수정</button>
               <button className="del-btn" onClick={() => setConfirmId(active.id)}>삭제</button>
             </div>
           </div>
@@ -451,9 +486,25 @@ export default function Newspaper() {
             <div>
               <div className="field-label">섹션 변경</div>
               <div className="cat-picker">
-                {cats.map(c => (
+                {catNames.map(c => (
                   <button key={c} className={`cat-pick-btn${editCat === c ? " on" : ""}`} onClick={() => setEditCat(c)}>{c}</button>
                 ))}
+              </div>
+            </div>
+            <div>
+              <div className="field-label">사진 (최대 2장)</div>
+              <div className="photo-row">
+                {editPhotos.map((p, i) => (
+                  <div key={i} className="photo-thumb-wrap">
+                    <img className="photo-thumb" src={p} alt="" />
+                    <button className="photo-del" onClick={() => setEditPhotos(prev => prev.filter((_, j) => j !== i))}>✕</button>
+                  </div>
+                ))}
+                {editPhotos.length < 2 && (
+                  <button className="photo-add" onClick={() => editPhotoInputRef.current?.click()}>+</button>
+                )}
+                <input ref={editPhotoInputRef} type="file" accept="image/*" multiple style={{display:"none"}}
+                  onChange={e => handlePhotoAdd(e.target.files, setEditPhotos)} />
               </div>
             </div>
             <textarea className="edit-ta" value={editText} onChange={e => setEditText(e.target.value)} autoFocus />
@@ -472,15 +523,13 @@ export default function Newspaper() {
             </div>
           </div>
           <div className="guide-body">
-            <button className="edit-cats-btn" onClick={() => { setEditCats([...cats]); goTo("cat-edit"); }}>섹션 편집</button>
+            <button className="edit-cats-btn" onClick={() => { setEditCats(cats.map(c => ({...c}))); goTo("cat-edit"); }}>섹션 편집</button>
             <p className="guide-intro">현재 {cats.length}개 섹션입니다.</p>
             {cats.map(cat => (
-              <div key={cat} className="guide-item">
-                <div className="guide-name">{cat}</div>
-                {CAT_DESC[cat] && <>
-                  <div className="guide-sub">{CAT_DESC[cat].sub}</div>
-                  <div className="guide-desc">{CAT_DESC[cat].desc}</div>
-                </>}
+              <div key={cat.name} className="guide-item">
+                <div className="guide-name">{cat.name}</div>
+                {cat.sub && <div className="guide-sub">{cat.sub}</div>}
+                {cat.desc && <div className="guide-desc">{cat.desc}</div>}
               </div>
             ))}
           </div>
@@ -497,20 +546,23 @@ export default function Newspaper() {
             </div>
           </div>
           <div className="cat-edit-body">
-            <p className="cat-edit-intro">섹션 이름을 수정하거나 추가·삭제할 수 있어요.</p>
+            <p className="cat-edit-intro">섹션 이름·키워드·설명을 수정할 수 있어요.</p>
             <div className="cat-edit-list">
               {editCats.map((c, i) => (
-                <div key={i} className="cat-edit-row">
-                  <input
-                    className="cat-edit-input"
-                    value={c}
-                    onChange={e => setEditCats(prev => prev.map((v, j) => j === i ? e.target.value : v))}
-                  />
-                  <button className="cat-edit-del" onClick={() => setEditCats(prev => prev.filter((_, j) => j !== i))}>✕</button>
+                <div key={i} className="cat-edit-card">
+                  <div className="cat-edit-card-top">
+                    <input className="cat-edit-name" placeholder="섹션 이름" value={c.name}
+                      onChange={e => setEditCats(prev => prev.map((v, j) => j === i ? {...v, name: e.target.value} : v))} />
+                    <button className="cat-edit-del" onClick={() => setEditCats(prev => prev.filter((_, j) => j !== i))}>✕</button>
+                  </div>
+                  <input className="cat-edit-sub" placeholder="키워드 (예: 주식 · 부동산 · 환율)" value={c.sub || ""}
+                    onChange={e => setEditCats(prev => prev.map((v, j) => j === i ? {...v, sub: e.target.value} : v))} />
+                  <textarea className="cat-edit-desc" placeholder="설명" value={c.desc || ""}
+                    onChange={e => setEditCats(prev => prev.map((v, j) => j === i ? {...v, desc: e.target.value} : v))} />
                 </div>
               ))}
             </div>
-            <button className="cat-add-btn" onClick={() => setEditCats(prev => [...prev, ""])}>+ 섹션 추가</button>
+            <button className="cat-add-btn" onClick={() => setEditCats(prev => [...prev, { name: "", sub: "", desc: "" }])}>+ 섹션 추가</button>
             <button className="cat-save-btn" onClick={handleCatSave}>저장</button>
           </div>
         </div>
