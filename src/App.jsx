@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 
-const STORAGE_KEY = "newspaper_v4";
-const CATS_KEY = "newspaper_cats_v4";
+const STORAGE_KEY = "newspaper_v5";
+const CATS_KEY = "newspaper_cats_v5";
+const PAGE_SIZE = 20;
+
 const DEFAULT_CATS = [
   { name: "정치·세계", sub: "국내정치 · 외교 · 국제정세 · 분쟁", desc: "국내외 정치 뉴스, 선거, 외교, 전쟁, 글로벌 이슈" },
   { name: "경제",      sub: "주식 · 부동산 · 환율 · 재테크",      desc: "증시, 환율, 부동산, 거시경제, 기업 실적" },
-  { name: "사회",      sub: "사건사고 · 교육 · 환경 · 복지",      desc: "국내 사건사고, 교육 정책, 기후·환경, 사회 이슈" },
+  { name: "사회",      sub: "사건사고 · 법원 · 교육 · 환경 · 복지", desc: "국내 사건사고, 법원·재판, 교육 정책, 기후·환경, 사회 이슈" },
   { name: "기술",      sub: "AI · IT · 과학 · 우주",              desc: "인공지능, 테크 기업, 신기술, 과학 발견, 우주 탐사" },
   { name: "문화",      sub: "영화 · 음악 · 책 · 예술 · 엔터",     desc: "영화, 드라마, 음악, 전시, 공연, 연예 뉴스" },
   { name: "스포츠",    sub: "축구 · 야구 · 농구 · 올림픽",        desc: "국내외 모든 스포츠 경기, 선수, 팀 소식" },
@@ -30,7 +32,6 @@ function extractMeta(text) {
 const fmtDate = (iso) => new Date(iso).toLocaleDateString("ko-KR", { month: "long", day: "numeric" });
 const todayStr = () => new Date().toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long" });
 
-// 이미지 압축 (max 800px, quality 0.7)
 function compressImage(file) {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -62,10 +63,10 @@ const css = `
     --font: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
   }
   body { font-family: var(--font); background: var(--bg); color: var(--ink); min-height: 100vh; }
-  .page { min-height: 100vh; display: flex; flex-direction: column; animation: fadeIn 0.15s ease; }
+  .page { height: 100dvh; display: flex; flex-direction: column; animation: fadeIn 0.15s ease; overflow: hidden; }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-  .top-bar { padding: 12px 16px 10px; border-bottom: 1px solid var(--ink); background: var(--paper); position: sticky; top: 0; z-index: 10; }
+  .top-bar { padding: 12px 16px 10px; border-bottom: 1px solid var(--ink); background: var(--paper); flex-shrink: 0; }
   .top-main { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
   .logo { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; color: var(--ink); }
   .top-meta { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
@@ -76,13 +77,22 @@ const css = `
   .back-btn::before { content: '←'; font-size: 15px; }
   .page-label { font-size: 13px; font-weight: 500; color: var(--ink); }
 
-  .cat-bar { display: flex; overflow-x: auto; border-bottom: 2px solid var(--rule); background: var(--paper); position: sticky; top: 61px; z-index: 9; }
+  /* 검색바 */
+  .search-bar { padding: 10px 16px; background: var(--paper); border-bottom: 1px solid var(--rule); flex-shrink: 0; }
+  .search-input { width: 100%; border: 1px solid var(--rule); border-radius: 20px; padding: 8px 14px; font-family: var(--font); font-size: 14px; color: var(--ink); background: var(--bg); outline: none; }
+  .search-input:focus { border-color: var(--blue); background: var(--paper); }
+  .search-input::placeholder { color: var(--muted); }
+
+  .cat-bar { display: flex; overflow-x: auto; border-bottom: 2px solid var(--rule); background: var(--paper); flex-shrink: 0; }
   .cat-bar::-webkit-scrollbar { display: none; }
   .cat-tab { padding: 10px 14px; font-size: 13px; font-weight: 400; color: var(--muted); background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; flex-shrink: 0; font-family: var(--font); margin-bottom: -2px; }
   .cat-tab.active { color: var(--blue); font-weight: 700; border-bottom-color: var(--blue); }
 
-  .portal { flex: 1; padding-bottom: 80px; background: var(--bg); }
-  .empty-portal { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--muted); padding: 60px 20px; text-align: center; }
+  /* 스크롤 영역 */
+  .scroll-area { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+  .portal { padding-bottom: 24px; background: var(--bg); }
+  .empty-portal { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--muted); padding: 60px 20px; text-align: center; min-height: 200px; }
   .empty-txt { font-size: 14px; line-height: 1.7; }
 
   .art-row { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--rule); cursor: pointer; background: var(--paper); }
@@ -97,11 +107,19 @@ const css = `
   .art-del { background: none; border: none; font-size: 14px; color: var(--rule); cursor: pointer; flex-shrink: 0; padding: 2px 4px; }
   .art-del:active { color: #cc0000; }
 
+  /* 페이지네이션 */
+  .pagination { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 16px; background: var(--paper); border-top: 1px solid var(--rule); }
+  .page-btn { padding: 6px 12px; border: 1px solid var(--rule); border-radius: 4px; background: var(--paper); color: var(--mid); font-family: var(--font); font-size: 13px; cursor: pointer; }
+  .page-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .page-info { font-size: 12px; color: var(--muted); }
+
   .fab { position: fixed; bottom: 24px; right: 20px; width: 52px; height: 52px; border-radius: 50%; background: var(--blue); color: #fff; border: none; font-size: 26px; cursor: pointer; box-shadow: 0 2px 12px rgba(0,102,204,0.4); display: flex; align-items: center; justify-content: center; transition: transform 0.15s; z-index: 20; }
   .fab:active { transform: scale(0.92); }
 
-  /* INPUT */
-  .input-body { flex: 1; display: flex; flex-direction: column; padding: 16px 12px; gap: 14px; overflow-y: auto; }
+  /* INPUT — 키보드 대응 */
+  .input-page { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; animation: fadeIn 0.15s ease; }
+  .input-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; }
   .field-label { font-size: 11px; font-weight: 700; color: var(--mid); margin-bottom: 6px; }
   .cat-picker { display: flex; flex-wrap: wrap; gap: 7px; }
   .cat-pick-btn { padding: 6px 13px; border-radius: 4px; border: 1px solid var(--rule); background: var(--paper); color: var(--mid); font-family: var(--font); font-size: 12px; cursor: pointer; }
@@ -110,15 +128,13 @@ const css = `
   .url-input:focus { border-color: var(--blue); }
   .url-input::placeholder { color: var(--muted); }
 
-  /* Photo upload */
   .photo-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .photo-thumb-wrap { position: relative; }
   .photo-thumb { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; display: block; }
   .photo-del { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; background: #cc0000; color: #fff; border: none; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
   .photo-add { width: 72px; height: 72px; border: 1.5px dashed var(--rule); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 24px; color: var(--muted); cursor: pointer; background: var(--paper); flex-shrink: 0; }
-  .photo-add:active { background: #F0F4FA; }
 
-  .article-ta { flex: 1; border: 1px solid var(--rule); border-radius: 4px; padding: 12px; font-family: var(--font); font-size: 14px; font-weight: 400; line-height: 1.75; color: var(--ink); background: var(--paper); outline: none; resize: none; min-height: 300px; width: 100%; }
+  .article-ta { width: 100%; border: 1px solid var(--rule); border-radius: 4px; padding: 12px; font-family: var(--font); font-size: 14px; font-weight: 400; line-height: 1.75; color: var(--ink); background: var(--paper); outline: none; resize: none; min-height: 300px; }
   .article-ta:focus { border-color: var(--blue); }
   .article-ta::placeholder { color: var(--muted); }
   .preview-box { background: #F0F4FA; border-radius: 4px; padding: 10px 12px; }
@@ -128,19 +144,20 @@ const css = `
   .save-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
   /* EDIT */
-  .edit-body { flex: 1; display: flex; flex-direction: column; padding: 16px 12px; gap: 14px; overflow-y: auto; }
-  .edit-ta { flex: 1; border: 1px solid var(--rule); border-radius: 4px; padding: 12px; font-family: var(--font); font-size: 14px; font-weight: 400; line-height: 1.75; color: var(--ink); background: var(--paper); outline: none; resize: none; min-height: 300px; width: 100%; }
+  .edit-page { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; animation: fadeIn 0.15s ease; }
+  .edit-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; }
+  .edit-ta { width: 100%; border: 1px solid var(--rule); border-radius: 4px; padding: 12px; font-family: var(--font); font-size: 14px; font-weight: 400; line-height: 1.75; color: var(--ink); background: var(--paper); outline: none; resize: none; min-height: 300px; }
   .edit-ta:focus { border-color: var(--blue); }
   .edit-save-btn { background: var(--blue); color: #fff; border: none; border-radius: 4px; padding: 14px; font-family: var(--font); font-size: 14px; font-weight: 700; cursor: pointer; }
 
   /* DETAIL */
-  .detail-body { flex: 1; overflow-y: auto; padding: 20px 16px 80px; }
+  .detail-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 20px 16px 80px; }
   .dv-source { font-size: 12px; font-weight: 700; color: var(--blue); margin-bottom: 6px; }
   .dv-cat { font-size: 11px; color: var(--muted); margin-bottom: 10px; }
   .dv-title { font-size: 22px; font-weight: 700; line-height: 1.4; margin-bottom: 8px; color: var(--ink); }
   .dv-date { font-size: 11px; color: var(--muted); padding-bottom: 16px; border-bottom: 1px solid var(--rule); margin-bottom: 16px; }
-  .dv-photos { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
-  .dv-photo { width: 100%; max-height: 240px; object-fit: cover; border-radius: 6px; display: block; }
+  .dv-photos { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .dv-photo { width: 100%; max-height: 240px; object-fit: cover; border-radius: 6px; }
   .dv-url { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
   .dv-url-text { font-size: 12px; color: var(--blue); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none; }
   .copy-btn { background: none; border: 1px solid var(--rule); border-radius: 4px; padding: 4px 10px; font-size: 11px; font-weight: 700; color: var(--mid); cursor: pointer; white-space: nowrap; font-family: var(--font); flex-shrink: 0; }
@@ -183,6 +200,9 @@ const css = `
   .confirm-no { padding: 14px; border: 1px solid var(--rule); border-radius: 8px; background: none; color: var(--mid); font-family: var(--font); font-size: 15px; cursor: pointer; }
 
   .toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 8px 18px; border-radius: 20px; font-size: 13px; z-index: 300; white-space: nowrap; }
+
+  /* 검색 하이라이트 */
+  mark { background: #FFF3B0; color: var(--ink); border-radius: 2px; }
 `;
 
 function ConfirmSheet({ onConfirm, onCancel }) {
@@ -202,6 +222,8 @@ export default function Newspaper() {
   const [cats, setCats] = useState(DEFAULT_CATS);
   const [history, setHistory] = useState(["home"]);
   const [activeTab, setActiveTab] = useState("전체");
+  const [searchQ, setSearchQ] = useState("");
+  const [page, setPage] = useState(1);
   const [inputText, setInputText] = useState("");
   const [inputUrl, setInputUrl] = useState("");
   const [inputPhotos, setInputPhotos] = useState([]);
@@ -253,17 +275,12 @@ export default function Newspaper() {
     } catch {}
   }, []);
 
-  useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(articles)); } catch {}
-  }, [articles]);
+  useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(articles)); } catch {} }, [articles]);
+  useEffect(() => { try { localStorage.setItem(CATS_KEY, JSON.stringify(cats)); } catch {} }, [cats]);
+  useEffect(() => { if (cats.length > 0 && !selectedCat) setSelectedCat(cats[0].name); }, [cats]);
 
-  useEffect(() => {
-    try { localStorage.setItem(CATS_KEY, JSON.stringify(cats)); } catch {}
-  }, [cats]);
-
-  useEffect(() => {
-    if (cats.length > 0 && !selectedCat) setSelectedCat(cats[0].name);
-  }, [cats]);
+  // 탭/검색 바뀌면 페이지 1로 리셋
+  useEffect(() => { setPage(1); }, [activeTab, searchQ]);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2000); };
 
@@ -278,11 +295,7 @@ export default function Newspaper() {
   const handleSave = () => {
     if (inputText.trim().length < 10) return;
     const { source, title } = extractMeta(inputText);
-    const item = {
-      id: Date.now(), title, source, category: selectedCat,
-      fullText: inputText, url: inputUrl.trim(),
-      photos: inputPhotos, savedAt: new Date().toISOString()
-    };
+    const item = { id: Date.now(), title, source, category: selectedCat, fullText: inputText, url: inputUrl.trim(), photos: inputPhotos, savedAt: new Date().toISOString() };
     setArticles(prev => [item, ...prev]);
     setActiveId(item.id);
     setShowFull(false);
@@ -294,9 +307,7 @@ export default function Newspaper() {
 
   const handleEditSave = () => {
     const { source, title } = extractMeta(editText);
-    setArticles(prev => prev.map(a =>
-      a.id === activeId ? { ...a, title, source, fullText: editText, category: editCat, photos: editPhotos } : a
-    ));
+    setArticles(prev => prev.map(a => a.id === activeId ? { ...a, title, source, fullText: editText, category: editCat, photos: editPhotos } : a));
     goBack();
   };
 
@@ -321,11 +332,25 @@ export default function Newspaper() {
     setCats(filtered); goBack(); showToast("섹션 저장됨!");
   };
 
+  // 필터링
+  const sorted = [...articles].sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+  const byCat = activeTab === "전체" ? sorted : sorted.filter(a => a.category === activeTab);
+  const bySearch = searchQ.trim()
+    ? byCat.filter(a =>
+        a.title.includes(searchQ) ||
+        (a.source || "").includes(searchQ) ||
+        (a.fullText || "").includes(searchQ)
+      )
+    : byCat;
+
+  const totalPages = Math.ceil(bySearch.length / PAGE_SIZE);
+  const paged = bySearch.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   const active = articles.find(a => a.id === activeId);
 
-  const ArtRow = ({ a, i, total, showCat }) => (
+  const ArtRow = ({ a, i, showCat }) => (
     <div className="art-row" onClick={() => { setActiveId(a.id); setShowFull(false); goTo("detail"); }}>
-      <div className="art-num">{String(total - i).padStart(2, "0")}</div>
+      <div className="art-num">{String(bySearch.length - ((page-1)*PAGE_SIZE + i)).padStart(2, "0")}</div>
       <div className="art-info">
         <div className="art-title">{a.title}</div>
         <div className="art-sub">
@@ -339,8 +364,25 @@ export default function Newspaper() {
     </div>
   );
 
-  const sorted = [...articles].sort((a, b) => b.savedAt.localeCompare(a.savedAt));
-  const filtered = activeTab === "전체" ? sorted : articles.filter(a => a.category === activeTab);
+  const Pagination = () => {
+    if (totalPages <= 1) return null;
+    const pages = [];
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
+    // 최대 5개 버튼
+    let start = Math.max(1, page - 2);
+    let end = Math.min(totalPages, start + 4);
+    start = Math.max(1, end - 4);
+    return (
+      <div className="pagination">
+        <button className="page-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}>‹</button>
+        {Array.from({length: end - start + 1}, (_, i) => start + i).map(p => (
+          <button key={p} className={`page-btn${page === p ? " active" : ""}`} onClick={() => setPage(p)}>{p}</button>
+        ))}
+        <button className="page-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>›</button>
+        <span className="page-info">{bySearch.length}개</span>
+      </div>
+    );
+  };
 
   return (
     <>
@@ -356,32 +398,38 @@ export default function Newspaper() {
               <div className="logo">Newspaper</div>
               <div className="top-meta">
                 <button className="guide-btn" onClick={() => goTo("guide")}>섹션 안내</button>
-                <span>v4 · {articles.length}개</span>
+                <span>v5 · {articles.length}개</span>
               </div>
             </div>
             <div className="top-date">{todayStr()}</div>
+          </div>
+          <div className="search-bar">
+            <input className="search-input" placeholder="제목, 신문사, 본문 검색…" value={searchQ} onChange={e => setSearchQ(e.target.value)} />
           </div>
           <div className="cat-bar">
             {["전체", ...catNames].map(t => (
               <button key={t} className={`cat-tab${activeTab === t ? " active" : ""}`} onClick={() => setActiveTab(t)}>{t}</button>
             ))}
           </div>
-          {articles.length === 0 ? (
-            <div className="empty-portal"><div className="empty-txt">아래 + 버튼으로<br/>기사를 클립하세요</div></div>
-          ) : (
-            <div className="portal">
-              {(activeTab === "전체" ? sorted : filtered).map((a, i, arr) => (
-                <ArtRow key={a.id} a={a} i={i} total={arr.length} showCat={activeTab === "전체"} />
-              ))}
-            </div>
-          )}
+          <div className="scroll-area">
+            {articles.length === 0 ? (
+              <div className="empty-portal"><div className="empty-txt">아래 + 버튼으로<br/>기사를 클립하세요</div></div>
+            ) : bySearch.length === 0 ? (
+              <div className="empty-portal"><div className="empty-txt">검색 결과가 없습니다</div></div>
+            ) : (
+              <div className="portal">
+                {paged.map((a, i) => <ArtRow key={a.id} a={a} i={i} showCat={activeTab === "전체"} />)}
+                <Pagination />
+              </div>
+            )}
+          </div>
           <button className="fab" onClick={() => { setInputText(""); setInputUrl(""); setInputPhotos([]); goTo("input"); }}>+</button>
         </div>
       )}
 
       {/* INPUT */}
       {screen === "input" && (
-        <div className="page">
+        <div className="input-page">
           <div className="top-bar">
             <div className="top-main">
               <button className="back-btn" onClick={goBack}>홈</button>
@@ -475,7 +523,7 @@ export default function Newspaper() {
 
       {/* EDIT */}
       {screen === "edit" && active && (
-        <div className="page">
+        <div className="edit-page">
           <div className="top-bar">
             <div className="top-main">
               <button className="back-btn" onClick={goBack}>취소</button>
