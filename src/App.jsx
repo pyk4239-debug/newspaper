@@ -249,6 +249,7 @@ export default function Newspaper() {
   const [editPhotos, setEditPhotos] = useState([]);
   const [showFull, setShowFull] = useState(false);
   const [confirmId, setConfirmId] = useState(null);
+  const [confirmLeave, setConfirmLeave] = useState(false);
   const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState("");
   const [editCats, setEditCats] = useState([]);
@@ -259,7 +260,17 @@ export default function Newspaper() {
   const catNames = cats.map(c => c.name);
 
   const goTo = (s) => { window.history.pushState({ len: history.length + 1 }, ""); setHistory(prev => [...prev, s]); };
-  const goBack = () => setHistory(prev => prev.length > 1 ? prev.slice(0, -1) : prev);
+  const goBack = () => {
+    if (screen === "input" && inputText.trim().length > 0) {
+      setConfirmLeave(true);
+      return;
+    }
+    if (screen === "edit" && editText.trim().length > 0) {
+      setConfirmLeave(true);
+      return;
+    }
+    setHistory(prev => prev.length > 1 ? prev.slice(0, -1) : prev);
+  };
 
   useEffect(() => {
     const t1 = setTimeout(() => setIntroOut(true), 2000);
@@ -426,6 +437,15 @@ export default function Newspaper() {
         </div>
       )}
       {confirmId && <ConfirmSheet onConfirm={doDelete} onCancel={() => setConfirmId(null)} />}
+      {confirmLeave && (
+        <div className="confirm-overlay" onClick={() => setConfirmLeave(false)}>
+          <div className="confirm-sheet" onClick={e => e.stopPropagation()}>
+            <div className="confirm-msg">작성 중인 내용이 있어요.<br/>나가시겠어요?</div>
+            <button className="confirm-yes" onClick={() => { setConfirmLeave(false); setHistory(prev => prev.length > 1 ? prev.slice(0, -1) : prev); }}>나가기</button>
+            <button className="confirm-no" onClick={() => setConfirmLeave(false)}>계속 작성</button>
+          </div>
+        </div>
+      )}
       {toast && <div className="toast">{toast}</div>}
 
       {/* HOME */}
