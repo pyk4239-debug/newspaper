@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy } from "firebase/firestore";
+import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, setDoc, getDoc } from "firebase/firestore";
 
 // Firebase 설정
 const firebaseConfig = {
@@ -16,7 +16,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-const CATS_KEY = "newspaper_cats_v6";
 const PAGE_SIZE = 20;
 
 const DEFAULT_CATS = [
@@ -209,6 +208,13 @@ const css = `
   .confirm-no { padding: 14px; border: 1px solid var(--rule); border-radius: 8px; background: none; color: var(--mid); font-family: var(--font); font-size: 15px; cursor: pointer; }
 
   .toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 8px 18px; border-radius: 20px; font-size: 13px; z-index: 300; white-space: nowrap; }
+
+  /* 인트로 */
+  .intro { position: fixed; inset: 0; background: #1A1A1A; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; z-index: 999; animation: fadeIn 0.3s ease; }
+  .intro.out { animation: fadeOut 0.5s ease forwards; }
+  @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+  .intro-logo { font-size: 36px; font-weight: 700; color: #fff; letter-spacing: -1px; }
+  .intro-sub { font-size: 12px; color: #888; letter-spacing: 2px; text-transform: uppercase; }
 `;
 
 function ConfirmSheet({ onConfirm, onCancel }) {
@@ -225,6 +231,8 @@ function ConfirmSheet({ onConfirm, onCancel }) {
 
 export default function Newspaper() {
   const [articles, setArticles] = useState([]);
+  const [intro, setIntro] = useState(true);
+  const [introOut, setIntroOut] = useState(false);
   const [loading, setLoading] = useState(true);
   const [cats, setCats] = useState(DEFAULT_CATS);
   const [history, setHistory] = useState(["home"]);
@@ -254,7 +262,12 @@ export default function Newspaper() {
   const goBack = () => setHistory(prev => prev.length > 1 ? prev.slice(0, -1) : prev);
 
   useEffect(() => {
-    window.history.pushState({ len: 1 }, "");
+    const t1 = setTimeout(() => setIntroOut(true), 2000);
+    const t2 = setTimeout(() => setIntro(false), 2500);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  useEffect(() => {
     window.history.pushState({ len: 2 }, "");
     const handler = () => {
       setHistory(prev => {
@@ -282,13 +295,16 @@ export default function Newspaper() {
     load();
   }, []);
 
+  // Firestore에서 섹션 불러오기
   useEffect(() => {
-    try { const c = localStorage.getItem(CATS_KEY); if (c) setCats(JSON.parse(c)); } catch {}
+    const loadCats = async () => {
+      try {
+        const snap = await getDoc(doc(db, "settings", "cats"));
+        if (snap.exists()) setCats(snap.data().list);
+      } catch {}
+    };
+    loadCats();
   }, []);
-
-  useEffect(() => {
-    try { localStorage.setItem(CATS_KEY, JSON.stringify(cats)); } catch {}
-  }, [cats]);
 
   useEffect(() => { if (cats.length > 0 && !selectedCat) setSelectedCat(cats[0].name); }, [cats]);
   useEffect(() => { setPage(1); }, [activeTab, searchQ]);
@@ -349,10 +365,15 @@ export default function Newspaper() {
     navigator.clipboard.writeText(url).then(() => { setCopied(true); showToast("링크 복사됨!"); setTimeout(() => setCopied(false), 2000); });
   };
 
-  const handleCatSave = () => {
+  const handleCatSave = async () => {
     const filtered = editCats.filter(c => c.name.trim());
     if (!filtered.length) return;
-    setCats(filtered); goBack(); showToast("섹션 저장됨!");
+    try {
+      await setDoc(doc(db, "settings", "cats"), { list: filtered });
+      setCats(filtered);
+      goBack();
+      showToast("섹션 저장됨! ☁️");
+    } catch { showToast("저장 실패"); }
   };
 
   const sorted = [...articles].sort((a, b) => b.savedAt.localeCompare(a.savedAt));
@@ -398,6 +419,12 @@ export default function Newspaper() {
   return (
     <>
       <style>{css}</style>
+      {intro && (
+        <div className={`intro${introOut ? " out" : ""}`}>
+          <div className="intro-logo">Newspaper</div>
+          <div className="intro-sub">나만의 뉴스 클리핑</div>
+        </div>
+      )}
       {confirmId && <ConfirmSheet onConfirm={doDelete} onCancel={() => setConfirmId(null)} />}
       {toast && <div className="toast">{toast}</div>}
 
