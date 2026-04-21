@@ -282,6 +282,13 @@ export default function Newspaper() {
     window.history.pushState({ len: 2 }, "");
     const handler = () => {
       setHistory(prev => {
+        const screen = prev[prev.length - 1];
+        if (screen === "input" || screen === "edit") {
+          // 내용 있으면 경고창 띄우고 스택 유지
+          setConfirmLeave(true);
+          window.history.pushState({ len: prev.length }, "");
+          return prev;
+        }
         if (prev.length > 1) { window.history.pushState({ len: prev.length }, ""); return prev.slice(0, -1); }
         else { window.history.pushState({ len: 1 }, ""); window.history.pushState({ len: 2 }, ""); return prev; }
       });
