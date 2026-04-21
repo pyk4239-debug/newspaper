@@ -260,12 +260,12 @@ export default function Newspaper() {
   const catNames = cats.map(c => c.name);
 
   const goTo = (s) => { window.history.pushState({ len: history.length + 1 }, ""); setHistory(prev => [...prev, s]); };
-  const goBack = () => {
-    if (screen === "input" && inputText.trim().length > 0) {
+  const goBack = (force = false) => {
+    if (!force && screen === "input" && inputText.trim().length > 0) {
       setConfirmLeave(true);
       return;
     }
-    if (screen === "edit" && editText.trim().length > 0) {
+    if (!force && screen === "edit" && editText.trim().length > 0) {
       setConfirmLeave(true);
       return;
     }
@@ -357,6 +357,7 @@ export default function Newspaper() {
     try {
       await updateDoc(doc(db, "articles", activeId), updated);
       setArticles(prev => prev.map(a => a.id === activeId ? { ...a, ...updated } : a));
+      setEditText(""); // 경고창 방지
       goBack();
       showToast("수정됐어요!");
     } catch (e) { showToast("수정 실패"); }
