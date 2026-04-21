@@ -357,8 +357,8 @@ export default function Newspaper() {
     try {
       await updateDoc(doc(db, "articles", activeId), updated);
       setArticles(prev => prev.map(a => a.id === activeId ? { ...a, ...updated } : a));
-      setEditText(""); // 경고창 방지
-      goBack();
+      setEditText("");
+      goBack(true);
       showToast("수정됐어요!");
     } catch (e) { showToast("수정 실패"); }
   };
